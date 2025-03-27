@@ -1,0 +1,349 @@
+AM2 DTPK SND format
+
+This knowledge stems from Sappharad's work with some additions from Vincent and Preppy.  If you find errors or omissions please let us know.
+Tables are generally padded for 4 byte read alignment.  Most tables appear to be optional.  Please note that all count values are 0-indexed, so add 1 to the value to get the count.  This incrementing should be noted below in reference to all counts.
+
+All numeric values are Little Endian
+0x00 - 4 bytes - Header: DTPK
+0x04 - 4 bytes - 32 bit DTPK ID
+0x08 - 4 bytes - 32 bit Size of file
+0x20 - 4 bytes - 32 bit Combination Table Location
+0x24 - 4 bytes - 32 bit Program Definitions Table Location
+0x28 - 4 bytes - 32 bit Unknown Table Location
+0x2c - 4 bytes - 32 bit Sequencer Table Location
+0x30 - 4 bytes - 32 bit Sample Playback Information Table Location
+0x34 - 4 bytes - 32 bit Intelligent Control Sound (ICS) Table Location
+0x38 - 4 bytes - 32 bit Effects Table Location
+0x3C - 4 bytes - 32 bit Sample Table Location
+
+====Combination Table
+0x00 - 2 bytes - Count of entries (Add 1 for number of combinations.  Maximum value is 0x80/0n128 for a total of 0n129 entries.)
+0x02 - Start of Entry offsets (0x02 bytes each)
+(end of Entry offsets) - Combination Entries
+	Combination entry 0x00 is the SE entry
+	Further entries are Song/Instrument entries
+
+Combination Entry:
+0x00 - 1 byte - 8 bit Count Timbre entries  (Add 1 for number of timbres)
+0x01 - 1 byte - 8 bit Volume (0-0x127)
+0x08 - Start of Timbre entries (0x20 bytes each)
+
+Timbre Entry:
+0x00 - 1 byte - 8 bit state
+	0x00: Muted
+	0x80: Active
+0x01 - 1 byte - 4 bit MIDI to use (0x00-0x0f)
+0x07 - 1 byte - FX Values
+	High 4 bits: FX Snd (0-0x0f)
+	Low 4 bits: FX Channel (0-0x0f)
+0x08 - 1 byte - 4 bit Range
+0x09 - 1 byte - 4 bit Volume
+0x0a - 1 byte - 8 bit Pan
+	0x00: Center
+	0x01-0x0f: Pan Right
+	0x10-0x1f: Pan Left
+0x0b - 1 byte - signed 8 bit Trans (0xc0-0x3f)
+0x0c - 1 byte - signed 8 bit Tune (0xc0-0x3f)
+
+====Sequencer Table
+0x00 - 4 bytes - Count of Sequencer Groups  (Add 1 for number of groups)
+0x04 - Start of Sequencer Group Label entries (0x04 bytes each)
+(end of Sequencer Group Label Entries) - Start of Sequencer Groups (variable length)
+
+Sequencer Group Label Entry:
+0x00 - 2 bytes - 16 bit offset from start of Sequencer Table for that Group's Definition Table
+0x02 - 1 byte - 8 bit Bank ID (as shown/used in SF2)
+0x03 - 1 byte - 8 bit Group Type
+     A8 - SONG
+     A9 - SFX (area 1)
+     AA - SFX (area 2)
+     AB - SFX (area 3)
+     AC - SFX or SONG (area 1)
+     AD - SFX or SONG (area 2)
+
+Sequencer Group Definition Table:
+0x00 - 4 bytes - Count Tracks  (Add 1 for number of tracks)
+0x04 - Start of Track Composition Data Locations (0x04 bytes each)
+(end of Track Composition Data locations) - Start of Track Composition Data
+
+Track Composition Data Location:
+0x00 - 4 bytes - Offset from start of Sequencer Table for that Track's Composition Entry
+
+Track Composition Entry:
+0x00 - 1 byte - Track Type
+	0x20-0x7f: SONG
+		0x20: audio playback by external device
+		0x40: audio playback by internal device (AICA)
+		0x60: audio playback by both
+	0xA0-0xFF: TRACK
+	Track High 4 byte values:
+		0x10: use the sequencer group value
+		0xa0: audio playback by external device
+		0xc0: audio playback by internal device (AICA)
+		0xe0: audio playback by both
+	Track Low 4 bytes:
+		0x0n: Sequencer group 'n'
+
+Further reads fork:
+SONG:
+	(unknown)
+
+TRACK:
+	0x00 - 1 byte - 4 bit Entry Type OR'd with 4 bit Sync Level
+		Values 0x00-0x7f - Sync level (0-127).
+			0x01 - 1 byte - Sync group (0-127)
+			0x02 - 1 byte - Entry Type
+		Values 0xA0-0xFF - Entry Type
+			Entry Type values:
+				0xA0: System Event
+				0xA4: FX Channel
+				0xA9: Request Bank Entry
+				0xDC-0xDF: Playback PCM
+
+	If System Event:
+		0x00 - 1 byte - Event ID
+			Event ID values:
+				0x00: Control Switch 
+				0x01: Total Volume
+				0x02: Song Pause
+				0x03: Song Continue
+				0x04: Song Volume
+				0x05: Song Volume Bias
+				0x06: Song Tempo Bias
+				0x07: Song Transpose
+				0x09: Fade In
+				0x0a: Fade Out
+				0x10: SE Volume
+				0x1a: MIDI Port Change
+				0x1b: Hard Volume
+				0x20: Sync Level
+				0x24: Status Display
+				0x28: Silent On
+				0x29: Silent Off
+		0x01 - 1 byte - 4 bit Event Value OR'd with 0x80
+			Event Values meaning if Control Switch entry:
+				0x00: NULL
+				0x01: All Sound Off
+				0x02: All Song Off
+				0x03: All SE Off
+				0x04: All ICS Off
+				0x08: Stereo SW
+				0x09: Mono SW
+				0x0a: MIDI Thru On
+				0x0b: MIDI Thru Off
+				0x0c: MIDI Internal
+				0x0d: MIDI External
+				0x0e: MIDI Both
+				0x0f: Request Thru On
+				0x10: Request Thru Off
+				0x11: Port Sound Off
+				0x12: Port Song Off
+				0x13: Port SE Off
+	If FX Channel:
+		0x00 - 1 byte - Request
+			Request values:
+				0x10: Relevel
+				0x20: Pan
+		0x01 - 1 byte - 4 bit value OR'd with 0x80
+	If Request Bank Entry:
+		0x00 - 1 byte - Bank number to use
+		0x01 - 1 byte - Unknown value
+	If Playback PCM:
+		0x00 - 1 byte - Sample Playback Definition ID low bits (0x00-0x7f).  The high bits are stored in the penultimate byte.
+				Note that for tracks with joined SPDs, the high bits of the last SPD are stored.  So if you traverse a bit boundary 
+				as in 0x7f joined with 0x80, the high bit is set to 0xx1, and then you need to know to use 0xx0 for the first reference.
+		0x01 - 1 byte - Volume
+		0x02 - 1 byte - Either End Track (0x8x) or Join (0x00)
+			The End Track value low bits are the high bits of the SPD ID.  So ((End_Track_Value & 0x0f) << 7) gets you the high bits you want.
+			Note as per above that for a Joined track that traverses bit boundaries (0x7f -> 0x80), the End Track lot bits being set to the high bits of the last referenced SPD.  You need to know to use N-1 once you hit the bit boundary (x % 0x80 == 0).
+		Joined Entry:
+			0x00 - 1 byte - Join Delay OR'd with 0x80
+			0x01 - 1 byte - Optional: 2nd Join Delay value
+			Join Delay Math:
+				delayIn44100Samples = (int(math.floor(unMaskedByte1 / 2)) * 11264) + ((unMaskedByte1 % 2) * 5120)
+				delayIn44100Samples += int(math.floor(unMaskedByte2 / 23)) * 1024
+			If Joined, next byte starts the repeat of the Used Entry 
+		<FinalByte> - 1 byte - Terminal Byte (0xFF)
+
+
+====Sample Playback Table
+0x10 - 1 byte - Sample Playback Information Count (Add 1 for number of entries)
+0x50 - Start of Sample Playback Information entries (0x40 bytes each)
+
+Sample Playback Information Entry:
+0x00 - 1 byte  - SPI ID.  Note that you can have more than 0xff count entries.  The extra high bits (0xff00) are thrown away, so know to keep track of absolute count (true SPI ID) rather than just the listed SPI ID value.
+0x02 - 1 byte  - Sample Used For Entry
+0x06 - 1 byte  - Pan. 0x00 - 0x1f or 0x80.  Default 0x80 (Combi).
+	0x00 == Center.  0x80 == Combi.  0x10-1f == Pan left.  0x01-0x0f == Pan right.
+0x07 - 1 byte  - Gain/Range. 0x00 - 0x0f or 0x80.  Default 0x0c.
+0x09 - 2 bytes - Combination of Rate, Transposition Base Note, and Detune.
+		Detune math is around:
+		if nDetune > 0x7f:
+			nDetune = ((0xFF + 0x1F) - nDetune) * -1
+		else:
+			nDetune = nDetune - 0x1e
+
+	# For rates, the Hz frequency is listed first, and the DTPK rate value is listed second.
+	# Note that that table overflows above 42000, so 44kHz appears to be rate value 0x0000.
+	rateDictionary16bit = { 4000 : 0xd61d, 6000 : 0xdd1e, 6500 : 0xde36, 7000 : 0xe008,
+				8000 : 0xe21d, 8012 : 0xe21e, 8500 : 0xe320,
+				9000 : 0xe41f, 9500 : 0xe51c, 10500 : 0xe70a,
+				11025 : 0xe800, 12000 : 0xe91e, 12500 : 0xea0b,
+				13000 : 0xea36, 14000 : 0xec08, 15000 : 0xed15,
+				16000 : 0xee1d, 17000 : 0xef20, 18000 : 0xf01f,
+				19000 : 0xf11c, 20000 : 0xf214, 21000 : 0xf30a,
+				22050 : 0xf400, 23000 : 0xf42f,
+				# everything above is real.
+				# everything following is speculative!
+				24000 : 0xf4f6,
+				25000 : 0xf600,
+				26000 : 0xf71d,
+				28000 : 0xf800,
+				30000 : 0xf900,
+				32000 : 0xfa13,
+				34000 : 0xfb00,
+				35000 : 0xfc1d,
+				38000 : 0xfd15,
+				40000 : 0xfe1d,
+				42000 : 0xff00
+				}
+
+	rateLowDictionary16bit = {
+				44100 : 0x0000,
+				45000 : 0x0100,
+				46000 : 0x0200,
+				47000 : 0x0300,
+				48000 : 0x0400,
+				49000 : 0x0500
+				}
+
+0x0c: 1 byte - Attack Sustain Decay flags 1
+0x0d: 1 byte - Attack Sustain Decay flags 2
+0x0e: 1 byte - Attack Sustain Decay flags 3
+0x0f: 1 byte - Attack Sustain Decay flags 4
+	Decay Level Low Bits = (((ASDf3 | 0x1f) ^ 0xff) ) >> 5
+	Decay Level High Bits = ((ASDf4 ^ 0xff) & 0x03) << 3
+
+	Attack Rate: ASDf1 & 0x1f.  Values: 0-0x1f.  Default 0x1f.
+	Decay Rate 1: (ASDf1 >> 6) + ((ASDf2 & 0x07) << 2).  Values 0-0x1f.  Default 0.
+	Decay Level = Decay Level Low Bits + Decay Level High Bits.  Values 0-0x1f. Default 0x1f.
+	Decay Rate 2 = ((ASDf2 >> 3)).  Values 0-0x1f. Default 0.
+	Release Rate = ASDf3 & 0x1f.  Values: 0-0x1f.  Default 0x1f.
+	Key Rate Scaling = (ASDf4 & 0x3c) >> 2.  Values: 0-0x0f.  Default 0.
+	LPLink = (ASDf4 >> 6) & 0x01.  Values: Off/On. Default Off (0).
+
+	# There should be bitmath to get to this point, but I wasn't getting it exactly
+	# right and thus I'm just going to skip that and use a lookup table.
+	DTPK127Encoding = [ 0x000, 0x389, 0x392, 0x398, 0x3a4, 0x3ad, 0x3b6, 0x3bf, # 0-7
+				0x3c8, 0x3d1, 0x3da, 0x3e3, 0x3ec, 0x3f5, 0x3fe, 0x407, # 8-15
+				0x410, 0x419, 0x422, 0x42b, 0x434, 0x43d, 0x446, 0x44f, # 16-23
+				0x458, 0x461, 0x46a, 0x473, 0x47c, 0x485, 0x48e, 0x497, # 24-31
+				0x4a0, 0x4a9, 0x4b2, 0x4bb, 0x4c4, 0x4cd, 0x4d6, 0x4df, # 32-39
+				0x4e8, 0x4f1, 0x4fa, 0x503, 0x50c, 0x515, 0x51e, 0x527, # 40-47
+				0x530, 0x539, 0x542, 0x54b, 0x554, 0x55d, 0x566, 0x56f, # 48-55
+				0x578, 0x581, 0x58a, 0x593, 0x59c, 0x5a5, 0x5ae, 0x5b7, # 56-63
+				0x5c0, 0x5c9, 0x5d2, 0x5db, 0x5e4, 0x5ed, 0x5f6, 0x5ff, # 64-71
+				0x608, 0x611, 0x61a, 0x623, 0x62c, 0x635, 0x63e, 0x647, # 72-79
+				0x650, 0x659, 0x662, 0x66b, 0x674, 0x67d, 0x686, 0x68f, # 80-87
+				0x698, 0x6a1, 0x6aa, 0x6b3, 0x6bc, 0x6c5, 0x6ce, 0x6d7, # 88-95
+				0x6e0, 0x6e9, 0x6f2, 0x6fb, 0x704, 0x70d, 0x716, 0x71f, # 96-103
+				0x728, 0x731, 0x73a, 0x743, 0x74c, 0x755, 0x75e, 0x767, # 104-111
+				0x770, 0x779, 0x782, 0x78b, 0x794, 0x79d, 0x7a6, 0x7af, # 112-119
+				0x7b8, 0x7c1, 0x7ca, 0x7d3, 0x7dc, 0x7e5, 0x7ee, 0x7fd  # 120-127
+				]
+
+0x10: 1 byte - Low Pass Filter Flags 1
+0x11: 1 byte - Low Pass Filter Flags 2
+	LPF Frequency 0 = DTPK127Encoding(((LPFFlags2 & 0x07) << 8) + LPFFlags1)
+	  Values 0-0x7f. Default 0.
+	LPF Attack Rate = (LPFFlags2 & 0xf8) >> 3. Values 0-0x1f. Default 0.
+
+0x12: 1 byte - Low Pass Filter Flags 1
+0x13: 1 byte - Low Pass Filter Flags 2
+	LPF Frequency 1 = DTPK127Encoding(((LPFFlags2 & 0x07) << 8) + LPFFlags1).
+	  Values 0-0x7f. Default 0x7f.
+	LPF Decay Rate 1 = (LPFFlags2 & 0xf8) >> 3. Values 0-0x1f. Default 0.
+
+0x14: 1 byte - Low Pass Filter Flags 1
+0x15: 1 byte - Low Pass Filter Flags 2
+	LPF Frequency 2 = DTPK127Encoding(((LPFFlags2 & 0x07) << 8) + LPFFlags1)
+	  Values 0-0x7f. Default 0x7f.
+	LPF Decay Rate 2 = (LPFFlags2 & 0xf8) >> 3. Values 0-0x1f. Default 0.
+
+0x16: 1 byte - Low Pass Filter Flags 1
+0x17: 1 byte - Low Pass Filter Flags 2
+	LPF Frequency 3 = DTPK127Encoding(((LPFFlags2 & 0x07) << 8) + LPFFlags1)
+	  Values 0-0x7f. Default 0x7f.
+	LPF Release Rate = (LPFFlags2 & 0xf8) >> 3. Values 0-0x1f. Default 0.
+
+0x18: 1 byte - Low Pass Filter Flags 1
+0x19: 1 byte - Low Pass Filter Flags 2
+	LPF Frequency 4 = DTPK127Encoding(((LPFFlags2 & 0x07) << 8) + LPFFlags1)
+	  Values 0-0x7f. Default 0x7f.
+
+0x1e: 1 byte - FX override.  0-0x0f or 0x80 (Combi).  Default 0.
+0x1f: 1 byte - FX Flags.
+	FX Channel = FXFlags & 0x0f.  Default 0
+	FX Send = (FXFlags & 0xf0) >> 4.  Default 0.
+
+0x22: 1 byte - Group override flags. Default 0.
+	0x00: No group / polyphonic
+	0x40: No group / polyphonic, self priority 0.
+	0x80: Mono/last priority for self.
+	0x81: Last arrival priority.  Decrement group priority by 1.
+	0x82: First arrival priority.
+	0xc0: Mono/last priority for self, self priority 0.
+	0xc1: Last arrival priority, self priority 0.
+	0xc2: First arrival priority, self priority 0.
+0x23: 1 byte - Group Priority.  Default 0.
+0x24: 1 byte - Self Priority.  Default 0.
+
+0x25: 1 byte - Low Pass Filter Q.
+	Setting is (value & 0xf8) >> 3.  Values: 0-0x29.  Default 4.
+	Values to the AICA translate to -3 to 20.25 dB via:
+		dB = ((Value * 3) / 4) - 3
+		
+0x28: 1 byte - Random Tune.  Default 0.  Values 0-0x0f.
+
+0x2e: 1 byte - Low Frequency Oscillation Delay. Values 0-0xff.  Default 0.
+0x2f: 1 byte - Low Frequency Oscillation Feed. Values 0-0xff. Default 0.
+0x30: 1 byte - Low Frequency Oscillation depth flags
+	LFO Pitch Depth = (LFOdf & 0xf0) >> 5.  Values 0-0x07.  Default 0 (Off).
+	LFO Amplifier Depth = LFOdf & 0x07.  Values 0-0x07.  Default 0 (Off).
+	LFO Amplifier Waveform: (LFOdf >> 3) & 0x03. Default 0 (Saw).
+	  Waveforms values: Saw (0), Square (1), Triangle (2), Noise (3).
+0x31: 1 byte - Low Frequency Oscillation form flags
+	LFO Pitch Waveform = LFOff & 0x03.  Default 0 (Saw).
+	LFO Speed = (LFOff & 0x7f) >> 2.  Values 0-0x1f.  Default 0.
+	LFO SYnc = (LFOff & 0x80) >> 0x07.  Values 0-0x01. Default 1 (On).
+
+
+====Effects Table:
+0x00 - 4 bytes - 32 bit Count of Effects Table Groups (Add 1 for number of groups)
+0x04 - Start of Effects Table Group entries
+
+Effects Table Group Entry:
+0x00 to 0x24 - 18 entries of 2 bytes each.  Each entry represents the PAN and VOLUME values for each channel.
+	PAN values:
+	0x00 = Center
+	0x01-0xF = Right Pan 1-15
+	0x11-0x1F = Left Pan 1-15
+
+	VOLUME values:
+	0x00-0x0F = Volume 0-15
+0x24 to 0xc24 - FPD Chunks controlling reverb, fades, chorus, pitch, etc.
+
+====Sample Table:
+0x00 - 4 bytes - 32 bit Index of last sample (Add 1 for number of samples)
+0x04 - Start of Sample entries (0x10 bytes each)
+
+Sample Entry:
+0x00 - 4 bytes - 32 bit Sample Location & Type
+    +- & 0x007FFFFF - Sample offset
+    +- & 0x00800000 - Sample quality. 0 Normal, 1 Half
+    +- & 0x01000000 - Format flag - 0 PCM, 1 ADPCM
+    +- & 0x02000000 - Unknown flag. Is NOT Mono/Stereo
+0x04 - 2 bytes - 16 bit Loop start offset from start of sample
+0x06 - 2 bytes - 16 bit Loop end offset from start of sample
+0x08 - 4 bytes - 32 bit value, either 0 or 0x80. 0x00 == Mono, 0x80 == Stereo
+0x0C - 4 bytes - 32 bit length of sample data
